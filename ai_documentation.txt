@@ -1,0 +1,323 @@
+Using ChatGPT
+
+Input:
+I have some code that's been given to me that calls data that I have moved into a subfolder within the active directory. The code to extract information is:
+# Extract the parameters for the desired event:
+event = events[eventname]
+fn_H1 = event['fn_H1']              # File name for H1 data
+fn_L1 = event['fn_L1']              # File name for L1 data
+fn_template = event['fn_template']  # File name for template waveform
+fs = event['fs']                    # Set sampling rate
+tevent = event['tevent']            # Set approximate event GPS time
+fband = event['fband']              # frequency band for bandpassing signal
+print("Reading in parameters for event " + event["name"])
+print(event)
+
+with output:
+Reading in parameters for event GW150914
+{'name': 'GW150914', 'fn_H1': 'H-H1_LOSC_4_V2-1126259446-32.hdf5', 'fn_L1': 'L-L1_LOSC_4_V2-1126259446-32.hdf5', 'fn_template': 'GW150914_4_template.hdf5', 'fs': 4096, 'tevent': 1126259462.44, 'utcevent': '2015-09-14T09:50:45.44', 'm1': 41.743, 'm2': 29.237, 'a1': 0.355, 'a2': -0.769, 'approx': 'lalsim.SEOBNRv2', 'fband': [43.0, 300.0], 'f_min': 10.0}
+
+The next code block is to read in the data:
+#----------------------------------------------------------------
+# Load LIGO data from a single file.
+# FIRST, define the filenames fn_H1 and fn_L1, above.
+#----------------------------------------------------------------
+try:
+    # read in data from H1 and L1, if available:
+    strain_H1, time_H1, chan_dict_H1 = rl.loaddata(fn_H1, 'H1')
+    strain_L1, time_L1, chan_dict_L1 = rl.loaddata(fn_L1, 'L1')
+except:
+    print("Cannot find data files!")
+    print("You can download them from https://www.gwosc.org/s/events/"+eventname)
+    print("Quitting.")
+    quit()
+
+This runs fine but the actual data is not being read in as the .hdf5 files have all been moved to a subfolder called "data". Where would I specify my path for these files from the subfolder to properly read the data in? 
+
+Output:
+Perfect question — this is a common situation when refactoring project structure.
+
+Right now, your code is just using filenames like:
+
+```python
+'H-H1_LOSC_4_V2-1126259446-32.hdf5'
+```
+
+which means it’s looking for those files in the **current working directory**.
+
+Since you’ve moved the `.hdf5` files into a subfolder called `data/`, you need to prepend that folder path when you assign `fn_H1`, `fn_L1`, and `fn_template`.
+
+---
+
+### ✅ Easiest fix (right after extracting the event parameters)
+
+You can modify the file paths like this:
+
+```python
+# Define a path to your data folder
+data_path = "data"
+
+# Extract parameters for the event
+event = events[eventname]
+
+# Prepend the folder path to the filenames
+fn_H1 = os.path.join(data_path, event['fn_H1'])
+fn_L1 = os.path.join(data_path, event['fn_L1'])
+fn_template = os.path.join(data_path, event['fn_template'])
+
+fs = event['fs']
+tevent = event['tevent']
+fband = event['fband']
+
+print("Reading in parameters for event " + event["name"])
+print(event)
+```
+
+Make sure to:
+
+```python
+import os
+```
+
+at the top of your script.
+
+---
+
+### 🔍 Why this works
+
+`os.path.join("data", "H-H1_LOSC_4_V2-1126259446-32.hdf5")`
+→ `"data/H-H1_LOSC_4_V2-1126259446-32.hdf5"`
+
+This way your later call:
+
+```python
+strain_H1, time_H1, chan_dict_H1 = rl.loaddata(fn_H1, 'H1')
+```
+
+will automatically look inside the `data/` subfolder, without changing any of the `rl.loaddata()` code.
+
+---
+
+If you ever move the data folder again (say to `inputs/data/`), you only need to change the one line:
+
+```python
+data_path = "inputs/data"
+```
+
+Would you like me to show a version that automatically detects the absolute path to the `data/` folder (useful if you run the notebook from different directories)?
+
+Input:
+TypeError                                 Traceback (most recent call last)
+Cell In[19], line 15
+     13 plt.legend(loc='lower right')
+     14 plt.title('Advanced LIGO strain data near '+eventname)
+---> 15 plt.savefig(os.path.join('figures', 'LIGO_strain_data.png'), eventname+'_strain.'+plottype)
+
+File /srv/conda/envs/notebook/lib/python3.12/site-packages/matplotlib/pyplot.py:1251, in savefig(*args, **kwargs)
+   1248 fig = gcf()
+   1249 # savefig default implementation has no return, so mypy is unhappy
+   1250 # presumably this is here because subclasses can return?
+-> 1251 res = fig.savefig(*args, **kwargs)  # type: ignore[func-returns-value]
+   1252 fig.canvas.draw_idle()  # Need this if 'transparent=True', to reset colors.
+   1253 return res
+
+TypeError: Figure.savefig() takes 2 positional arguments but 3 were given
+
+Output:
+Excellent — that error tells you exactly what’s going wrong:
+you’re passing **too many positional arguments** to `plt.savefig()`.
+
+---
+
+### 🔍 The problem
+
+This line:
+
+```python
+plt.savefig(os.path.join('figures', 'LIGO_strain_data.png'), eventname+'_strain.'+plottype)
+```
+
+is passing **two positional arguments**:
+
+1. `os.path.join('figures', 'LIGO_strain_data.png')`
+2. `eventname+'_strain.'+plottype`
+
+But `plt.savefig()` only accepts **one** positional argument — the filename.
+
+---
+
+### ✅ The fix
+
+You probably meant to *use* `eventname` and `plottype` to build the filename dynamically, like this:
+
+```python
+# Make sure the output directory exists
+os.makedirs("figures", exist_ok=True)
+
+# Build filename properly
+filename = os.path.join("figures", f"{eventname}_strain.{plottype}")
+
+# Save the figure
+plt.savefig(filename, bbox_inches="tight")
+```
+
+---
+
+### 🧠 Example
+
+If:
+
+```python
+eventname = "GW150914"
+plottype = "png"
+```
+
+then:
+
+```python
+filename = "figures/GW150914_strain.png"
+```
+
+and the figure will save to that file correctly.
+
+---
+
+Would you like me to show a version that automatically adds the event name and a timestamp (so that new plots don’t overwrite old ones)?
+
+Input: 
+# make wav (sound) files from the whitened data, +-2s around the event.
+
+from scipy.io import wavfile
+
+# function to keep the data within integer limits, and write to wavfile:
+def write_wavfile(filename,fs,data):
+    d = np.int16(data/np.max(np.abs(data)) * 32767 * 0.9)
+    wavfile.write(filename,int(fs), d)
+
+deltat_sound = 2.                     # seconds around the event
+
+# index into the strain time series for this time interval:
+indxd = np.where((time >= tevent-deltat_sound) & (time < tevent+deltat_sound))
+
+# write the files:
+write_wavfile(eventname+"_H1_whitenbp.wav",int(fs), strain_H1_whitenbp[indxd])
+write_wavfile(eventname+"_L1_whitenbp.wav",int(fs), strain_L1_whitenbp[indxd])
+
+# re-whiten the template using the smoothed PSD; it sounds better!
+template_p_smooth = whiten(template_p,psd_smooth,dt)
+
+# and the template, sooming in on [-3,+1] seconds around the merger:
+indxt = np.where((time >= (time[0]+template_offset-deltat_sound)) & (time < (time[0]+template_offset+deltat_sound)))
+write_wavfile(eventname+"_template_whiten.wav",int(fs), template_p_smooth[indxt])
+
+How can I save the created wavfiles to the data folder?
+
+Output:
+Perfect question — you just need to **prepend the path to your `data` folder** when specifying each `.wav` filename.
+
+Here’s the clean and safe way to modify your code 👇
+
+---
+
+### ✅ Updated version (saves to `data` folder)
+
+```python
+import os
+from scipy.io import wavfile
+
+# Function to normalize and write WAV files
+def write_wavfile(filename, fs, data):
+    d = np.int16(data / np.max(np.abs(data)) * 32767 * 0.9)
+    wavfile.write(filename, int(fs), d)
+
+# Create the data folder if it doesn't exist
+output_folder = "data"
+os.makedirs(output_folder, exist_ok=True)
+
+deltat_sound = 2.0  # seconds around the event
+
+# Indices into the strain time series for this time interval
+indxd = np.where((time >= tevent - deltat_sound) & (time < tevent + deltat_sound))
+
+# Write whitened H1 and L1 data
+write_wavfile(os.path.join(output_folder, f"{eventname}_H1_whitenbp.wav"),
+              int(fs), strain_H1_whitenbp[indxd])
+write_wavfile(os.path.join(output_folder, f"{eventname}_L1_whitenbp.wav"),
+              int(fs), strain_L1_whitenbp[indxd])
+
+# Re-whiten the template using the smoothed PSD
+template_p_smooth = whiten(template_p, psd_smooth, dt)
+
+# Template indices for [-3,+1] seconds around the merger
+indxt = np.where((time >= (time[0] + template_offset - deltat_sound)) &
+                 (time < (time[0] + template_offset + deltat_sound)))
+
+# Write whitened template
+write_wavfile(os.path.join(output_folder, f"{eventname}_template_whiten.wav"),
+              int(fs), template_p_smooth[indxt])
+```
+
+---
+
+### 🧠 What this does
+
+* Ensures all `.wav` files go into your `data` subfolder (same as your `.hdf5` files).
+* Automatically creates the `data` folder if it doesn’t exist.
+* Keeps file names consistent and readable (e.g. `data/GW150914_H1_whitenbp.wav`).
+
+---
+
+Would you like me to modify it so that it saves to a new subfolder like `data/wav/` to keep audio files separate from the `.hdf5` files?
+
+Input:
+How can I save the generated audio file in a folder called "audio"? 
+from IPython.display import Audio
+
+fna = eventname+"_template_whiten.wav"
+print(fna)
+Audio(fna)
+
+Output:
+Good question — that’s a great refinement.
+
+If you want to **store the generated audio files in a subfolder called `audio`** (instead of `data`), you just need to:
+
+1. Create the folder (if it doesn’t already exist), and
+2. Pass the correct path both when writing the file and when loading it back for playback.
+
+Here’s how to do it cleanly 👇
+
+---
+
+### ✅ Updated version (save and play from `"audio"` folder)
+
+```python
+import os
+from IPython.display import Audio
+
+# Define the audio output folder
+audio_folder = "audio"
+os.makedirs(audio_folder, exist_ok=True)
+
+# Save path for the template whitened audio file
+fna = os.path.join(audio_folder, f"{eventname}_template_whiten.wav")
+
+# Write the file (assuming you've defined write_wavfile earlier)
+write_wavfile(fna, int(fs), template_p_smooth[indxt])
+
+# Confirm and play it
+print(f"Saved audio file: {fna}")
+Audio(fna)
+```
+
+---
+
+### 🧠 Explanation
+
+* `os.makedirs(audio_folder, exist_ok=True)` ensures the `audio` directory exists.
+* `os.path.join()` safely combines the folder and filename so it works on any OS.
+* You can replace `template_p_smooth[indxt]` with any signal array (e.g., `strain_H1_whitenbp[indxd]`) if you want to save different waveforms.
+
+---
+
+Would you like the other `.wav` files (H1, L1, etc.) to be automatically saved in the same `audio/` folder too?
