@@ -11,13 +11,13 @@ authors = [
 description = "A Python library to make toys"
 readme = "README.md"
 
-requires-python = "=3.9"
+requires-python = ">=3.9"
 dependencies = [
-    "numpy=2.0",
-    "scipy=1.13",
-    "h5py=3.12",
-    "matplotlib=3.9",
-    "ipykernel=6.29"
+    "numpy>=2.0",
+    "scipy>=1.13",
+    "h5py>=3.12",
+    "matplotlib>=3.9",
+    "ipykernel>=6.29"
 ]
 
 license = "BSD-3-Clause"
